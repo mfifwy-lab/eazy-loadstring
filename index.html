@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LuaShort — แชร์โค้ด Lua</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2128;
+    --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --accent:#58a6ff; --green:#238636; --gold:#f0b132; --red:#f85149;
+  }
+  html,body{
+    background:var(--bg); color:var(--text); min-height:100vh;
+    font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+    line-height:1.5;
+  }
+
+  /* ---------- Coin Badge (ซ้ายบน) ---------- */
+  #coinBadge{
+    position:fixed; top:14px; left:14px; z-index:99;
+    display:flex; align-items:center; gap:8px;
+    padding:8px 16px; border-radius:999px;
+    background:linear-gradient(135deg,#1f2937,#111827);
+    border:1px solid rgba(240,177,50,.35);
+    color:var(--gold); font-weight:800; font-size:15px;
+    box-shadow:0 4px 18px rgba(0,0,0,.5);
+    user-select:none;
+  }
+  #coinBadge .coin{font-size:18px; filter:drop-shadow(0 0 6px rgba(240,177,50,.6))}
+
+  /* ---------- Settings button ---------- */
+  #settingsBtn{
+    position:fixed; top:14px; right:14px; z-index:99;
+    width:44px; height:44px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--border);
+    color:var(--text); font-size:20px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:.2s;
+  }
+  #settingsBtn:hover{background:var(--panel2); transform:rotate(45deg)}
+
+  /* ---------- Container ---------- */
+  .wrap{max-width:900px; margin:0 auto; padding:80px 20px 60px}
+
+  h1{
+    font-size:28px; margin-bottom:6px;
+    background:linear-gradient(90deg,#58a6ff,#a371f7,#f0b132);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .sub{color:var(--muted); font-size:14px; margin-bottom:24px}
+
+  .card{
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:14px; padding:20px; margin-bottom:16px;
+  }
+  label{display:block; font-size:13px; color:var(--muted); margin-bottom:8px; font-weight:600}
+
+  input[type=text], textarea{
+    width:100%; background:#0d1117; color:var(--text);
+    border:1px solid var(--border); border-radius:10px;
+    padding:12px 14px; font-size:14px; outline:none;
+    font-family:inherit; transition:.2s;
+  }
+  input[type=text]:focus, textarea:focus{border-color:var(--accent); box-shadow:0 0 0 3px rgba(88,166,255,.15)}
+  textarea{
+    min-height:220px; resize:vertical;
+    font-family:"JetBrains Mono","Fira Code",Consolas,monospace;
+    font-size:13px; line-height:1.55;
+  }
+
+  .row{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px}
+
+  button.btn{
+    border:none; border-radius:10px; padding:12px 20px;
+    font-size:14px; font-weight:700; cursor:pointer;
+    color:#fff; transition:.18s; font-family:inherit;
+  }
+  button.btn:active{transform:scale(.97)}
+  .btn-primary{background:var(--green)}
+  .btn-primary:hover{background:#2ea043}
+  .btn-accent{background:#1f6feb}
+  .btn-accent:hover{background:#388bfd}
+  .btn-gold{background:#9e6a03}
+  .btn-gold:hover{background:#bb8009}
+  .btn-ghost{background:transparent; border:1px solid var(--border); color:var(--text)}
+  .btn-ghost:hover{background:var(--panel2)}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+
+  /* ---------- Result ---------- */
+  .result{margin-top:16px; display:none}
+  .result.show{display:block}
+  .linkBox{
+    display:flex; gap:8px; align-items:center;
+    background:#0d1117; border:1px dashed var(--accent);
+    border-radius:10px; padding:12px 14px; word-break:break-all;
+    font-family:Consolas,monospace; font-size:13px; color:var(--accent);
+  }
+  .linkBox span{flex:1}
+
+  /* ---------- View Code Section ---------- */
+  .codeHeader{display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px}
+  .codeHeader h2{font-size:20px}
+  .stats{display:flex; gap:14px; font-size:13px; color:var(--muted)}
+  .stats b{color:var(--text)}
+
+  pre.code{
+    background:#010409; border:1px solid var(--border); border-radius:10px;
+    padding:16px; overflow:auto; max-height:360px;
+    font-family:"JetBrains Mono",Consolas,monospace;
+    font-size:13px; line-height:1.55; color:#c9d1d9;
+    white-space:pre; tab-size:2;
+  }
+
+  .loadBox{
+    margin-top:16px; padding:14px;
+    background:#0d1117; border:1px solid var(--green);
+    border-radius:10px; display:none;
+  }
+  .loadBox.show{display:block}
+  .loadBox .out{
+    font-family:Consolas,monospace; font-size:13px;
+    color:#7ee787; word-break:break-all; margin-bottom:10px;
+  }
+
+  /* ---------- Modal ---------- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.7);
+    display:none; align-items:center; justify-content:center;
+    z-index:200; padding:20px;
+  }
+  .overlay.show{display:flex}
+  .modal{
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:14px; padding:22px; width:100%; max-width:400px;
+    animation:pop .18s ease-out;
+  }
+  @keyframes pop{from{transform:scale(.94); opacity:0}to{transform:scale(1); opacity:1}}
+  .modal h3{margin-bottom:14px; font-size:18px}
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(80px);
+    background:var(--panel2); border:1px solid var(--border);
+    padding:12px 22px; border-radius:10px; font-size:14px;
+    opacity:0; transition:.3s; z-index:500; pointer-events:none;
+    box-shadow:0 10px 30px rgba(0,0,0,.5);
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .toast.ok{border-color:var(--green); color:#7ee787}
+  .toast.err{border-color:var(--red); color:#ff7b72}
+
+  .hidden{display:none !important}
+  .note{font-size:12px; color:var(--muted); margin-top:10px}
+</style>
+</head>
+<body>
+
+<!-- คอย ซ้ายบน -->
+<div id="coinBadge"><span class="coin">🪙</span><span id="coinCount">0</span></div>
+
+<!-- ปุ่มตั้งค่า -->
+<button id="settingsBtn" title="ตั้งค่า">⚙️</button>
+
+<!-- ========== หน้าเดียว รวมทุกอย่าง ========== -->
+<div class="wrap">
+  <h1>LuaShort</h1>
+  <p class="sub">วางโค้ด Lua → สร้างลิงค์สั้น → แชร์ให้คนอื่นกด Loadstring</p>
+
+  <!-- [1] กรอกโค้ด + สร้างลิงค์ -->
+  <div class="card">
+    <label>📝 โค้ด Lua ของคุณ</label>
+    <textarea id="codeInput" placeholder="-- # Roblox Lua Script&#10;local Players = game:GetService(&quot;Players&quot;)&#10;..."></textarea>
+
+    <div class="row">
+      <input type="text" id="customName" placeholder="ตั้งชื่อลิงค์ (ไม่ใส่ก็ได้ → สุ่มให้)" style="flex:1; min-width:200px"/>
+    </div>
+
+    <div class="row">
+      <button class="btn btn-primary" id="genBtn">🔗 สร้างลิงค์สั้น</button>
+      <button class="btn btn-ghost" id="clearBtn">ล้าง</button>
+    </div>
+
+    <div class="result" id="resultBox">
+      <label style="margin-top:14px">✅ ลิงค์ของคุณ (คัดลอกไปแชร์ได้เลย)</label>
+      <div class="linkBox"><span id="shortLink"></span></div>
+      <div class="row">
+        <button class="btn btn-accent" id="copyLink">📋 คัดลอกลิงค์</button>
+        <button class="btn btn-ghost" id="openLink">👁 เปิดดู (ไม่มีคอย)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- [2] แสดงโค้ด + ปุ่ม Loadstring (อยู่หน้าเดียวกัน) -->
+  <div class="card hidden" id="codeCard">
+    <div class="codeHeader">
+      <h2>📜 โค้ด Lua</h2>
+      <div class="stats">
+        <span>👁 เปิดดู: <b id="viewCount">0</b></span>
+        <span>🆔 <b id="codeId">-</b></span>
+      </div>
+    </div>
+
+    <pre class="code" id="codeDisplay"></pre>
+
+    <div class="row">
+      <button class="btn btn-gold" id="loadstringBtn">⚡ ทำเป็น Loadstring (ใช้ 25 🪙)</button>
+      <button class="btn btn-ghost" id="closeCodeBtn">✕ ปิด</button>
+    </div>
+
+    <div class="loadBox" id="loadBox">
+      <label>🎯 คัดลอกไปวางใน Executor ได้เลย</label>
+      <div class="out" id="loadOut"></div>
+      <button class="btn btn-accent" id="copyLoad">📋 คัดลอก Loadstring</button>
+    </div>
+  </div>
+
+  <!-- [3] ประวัติลิงค์ -->
+  <div class="card">
+    <label>📊 ลิงค์ทั้งหมดของคุณ</label>
+    <div id="myLinks" style="font-size:14px; color:var(--muted)">ยังไม่มีลิงค์</div>
+  </div>
+</div>
+
+<!-- ========== Settings Modal ========== -->
+<div class="overlay" id="settingsModal">
+  <div class="modal">
+    <h3>⚙️ ตั้งค่า</h3>
+    <label>กรอกโค้ดรับคอย</label>
+    <input type="text" id="codeField" placeholder="ใส่โค้ดที่นี่..."/>
+    <div class="row">
+      <button class="btn btn-primary" id="applyCode" style="flex:1">ยืนยัน</button>
+      <button class="btn btn-ghost" id="closeSettings">ปิด</button>
+    </div>
+    <p class="note">💡 คอยใช้สำหรับกดปุ่ม Loadstring (25 คอย / ครั้ง)</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================
+   STORAGE LAYER
+===================================================== */
+const LS_COINS = 'luashort_coins_v1';
+const LS_CODES = 'luashort_codes_v1';
+const LS_USED  = 'luashort_used_v1';
+const COST_PER_LOAD = 25;
+
+const Store = {
+  getCoins(){ return parseInt(localStorage.getItem(LS_COINS) || '0', 10) || 0; },
+  setCoins(n){ localStorage.setItem(LS_COINS, String(Math.max(0, n|0))); UI.refreshCoins(); },
+  addCoins(n){ Store.setCoins(Store.getCoins() + (n|0)); },
+
+  getCodes(){ try { return JSON.parse(localStorage.getItem(LS_CODES) || '{}'); } catch(e){ return {}; } },
+  setCodes(o){ localStorage.setItem(LS_CODES, JSON.stringify(o)); },
+
+  saveCode(id, code, name){
+    const all = Store.getCodes();
+    all[id] = { code, name: name || id, views: 0, createdAt: Date.now(), lastVisit: 0, shortUrl: null };
+    Store.setCodes(all);
+    return all[id];
+  },
+  getCode(id){ return Store.getCodes()[id] || null; },
+  incView(id){
+    const all = Store.getCodes();
+    if (all[id]) { all[id].views = (all[id].views||0)+1; all[id].lastVisit = Date.now(); Store.setCodes(all); }
+  },
+  setShortUrl(id, url){
+    const all = Store.getCodes();
+    if (all[id]) { all[id].shortUrl = url; Store.setCodes(all); }
+  },
+  getUsed(){ try { return JSON.parse(localStorage.getItem(LS_USED) || '[]'); } catch(e){ return []; } },
+  markUsed(c){ const u = Store.getUsed(); if(!u.includes(c)){ u.push(c); localStorage.setItem(LS_USED, JSON.stringify(u)); } },
+  isUsed(c){ return Store.getUsed().includes(c); }
+};
+
+/* =====================================================
+   UTIL
+===================================================== */
+function genId(len = 6){
+  const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
+  let s = '';
+  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
+
+function toast(msg, type = 'ok'){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.className = 'toast ' + type, 2200);
+}
+
+function copy(text){
+  navigator.clipboard.writeText(text).then(
+    () => toast('คัดลอกแล้ว ✅', 'ok'),
+    () => toast('คัดลอกไม่สำเร็จ ❌', 'err')
+  );
+}
+
+/* พยายามย่อลิงค์ผ่าน TinyURL (ถ้าเน็ต/API ล่ม จะคืนลิงค์เดิม) */
+async function tryShorten(url){
+  try {
+    const res = await fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(url));
+    if (res.ok) {
+      const txt = (await res.text()).trim();
+      if (txt.startsWith('http')) return txt;
+    }
+  } catch(e){}
+  return url;
+}
+
+/* =====================================================
+   UI HELPERS
+===================================================== */
+const UI = {
+  refreshCoins(){
+    document.getElementById('coinCount').textContent = Store.getCoins();
+  },
+  renderMyLinks(){
+    const box = document.getElementById('myLinks');
+    const all = Store.getCodes();
+    const ids = Object.keys(all).sort((a,b)=> (all[b].createdAt||0)-(all[a].createdAt||0));
+    if (!ids.length){ box.innerHTML = 'ยังไม่มีลิงค์'; return; }
+    box.innerHTML = ids.map(id => {
+      const c = all[id];
+      const url = c.shortUrl || (location.origin + location.pathname + '#c=' + id);
+      return `<div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="min-width:0;flex:1">
+          <div style="color:var(--text);font-weight:600">${escapeHtml(c.name)}</div>
+          <a href="#c=${id}" style="color:var(--accent);font-size:12px;word-break:break-all">${escapeHtml(url)}</a>
+        </div>
+        <div style="font-size:12px;color:var(--muted);white-space:nowrap">👁 ${c.views||0}</div>
+      </div>`;
+    }).join('');
+  },
+  showCodeCard(id){
+    const entry = Store.getCode(id);
+    if (!entry) return;
+    document.getElementById('codeDisplay').textContent = entry.code;
+    document.getElementById('viewCount').textContent = entry.views || 0;
+    document.getElementById('codeId').textContent = id;
+    document.getElementById('loadBox').classList.remove('show');
+    document.getElementById('codeCard').classList.remove('hidden');
+    // scroll ไปที่การ์ดโค้ด
+    document.getElementById('codeCard').scrollIntoView({behavior:'smooth', block:'start'});
+  },
+  hideCodeCard(){
+    document.getElementById('codeCard').classList.add('hidden');
+    document.getElementById('loadBox').classList.remove('show');
+  }
+};
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+/* =====================================================
+   สร้างลิงค์สั้น
+===================================================== */
+document.getElementById('genBtn').addEventListener('click', async () => {
+  const code = document.getElementById('codeInput').value.trim();
+  if (!code) return toast('กรุณาใส่โค้ดก่อน ❌', 'err');
+
+  const customName = document.getElementById('customName').value.trim();
+  const id = genId(6);
+
+  Store.saveCode(id, code, customName || id);
+
+  const baseUrl = location.origin + location.pathname + '#c=' + id;
+  const shortUrl = await tryShorten(baseUrl);
+
+  Store.setShortUrl(id, shortUrl);
+
+  document.getElementById('shortLink').textContent = shortUrl;
+  document.getElementById('resultBox').classList.add('show');
+  document.getElementById('resultBox').dataset.url = shortUrl;
+  document.getElementById('resultBox').dataset.id  = id;
+
+  // แสดงการ์ดโค้ดในหน้าเดียวกันทันที
+  UI.showCodeCard(id);
+
+  toast('สร้างลิงค์สำเร็จ 🎉', 'ok');
+  UI.renderMyLinks();
+});
+
+document.getElementById('copyLink').addEventListener('click', () => {
+  const url = document.getElementById('resultBox').dataset.url;
+  if (url) copy(url);
+});
+
+/* ปุ่ม เปิดดู — แค่เลื่อนไปดูโค้ดเฉยๆ ไม่เกี่ยวกับคอย */
+document.getElementById('openLink').addEventListener('click', () => {
+  const id = document.getElementById('resultBox').dataset.id;
+  if (id) UI.showCodeCard(id);
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  document.getElementById('codeInput').value = '';
+  document.getElementById('customName').value = '';
+  document.getElementById('resultBox').classList.remove('show');
+  UI.hideCodeCard();
+});
+
+document.getElementById('closeCodeBtn').addEventListener('click', () => {
+  UI.hideCodeCard();
+});
+
+/* =====================================================
+   ROUTER  (เปิดผ่าน #c=ID)
+===================================================== */
+function router(){
+  const hash = location.hash.slice(1);
+  if (hash.startsWith('c=')) {
+    const id = hash.slice(2);
+    const entry = Store.getCode(id);
+    if (!entry) {
+      toast('ไม่พบโค้ดนี้ ❌', 'err');
+      location.hash = '';
+      return;
+    }
+    // นับการเข้าชม (การเปิดดูเฉยๆ ไม่หักคอย)
+    Store.incView(id);
+    UI.showCodeCard(id);
+    UI.renderMyLinks();
+  } else {
+    UI.hideCodeCard();
+  }
+}
+
+window.addEventListener('hashchange', router);
+window.addEventListener('DOMContentLoaded', () => {
+  UI.refreshCoins();
+  router();
+  UI.renderMyLinks();
+});
+
+/* =====================================================
+   LOADSTRING BUTTON  (หัก 25 คอย)
+===================================================== */
+document.getElementById('loadstringBtn').addEventListener('click', () => {
+  const coins = Store.getCoins();
+  if (coins < COST_PER_LOAD){
+    return toast(`คอยไม่พอ! ต้องมี ${COST_PER_LOAD} 🪙 (มี ${coins})`, 'err');
+  }
+
+  const id = document.getElementById('codeId').textContent;
+  const entry = Store.getCode(id);
+  if (!entry) return toast('ไม่พบโค้ด ❌', 'err');
+
+  Store.addCoins(-COST_PER_LOAD);
+
+  const rawUrl = entry.shortUrl || (location.origin + location.pathname + '#c=' + id);
+  const loadStr = `loadstring(game:HttpGet("${rawUrl}"))()`;
+
+  document.getElementById('loadOut').textContent = loadStr;
+  document.getElementById('loadBox').classList.add('show');
+
+  toast(`-${COST_PER_LOAD} 🪙 สร้าง Loadstring สำเร็จ`, 'ok');
+});
+
+document.getElementById('copyLoad').addEventListener('click', () => {
+  const txt = document.getElementById('loadOut').textContent;
+  if (txt) copy(txt);
+});
+
+/* =====================================================
+   SETTINGS  — ระบบโค้ดรับคอย
+===================================================== */
+const settingsModal = document.getElementById('settingsModal');
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  settingsModal.classList.add('show');
+  document.getElementById('codeField').value = '';
+  document.getElementById('codeField').focus();
+});
+document.getElementById('closeSettings').addEventListener('click', () => {
+  settingsModal.classList.remove('show');
+});
+settingsModal.addEventListener('click', e => {
+  if (e.target === settingsModal) settingsModal.classList.remove('show');
+});
+
+document.getElementById('applyCode').addEventListener('click', () => {
+  const raw = document.getElementById('codeField').value.trim();
+  if (!raw) return toast('กรุณาใส่โค้ด ❌', 'err');
+
+  /* --- โค้ด Freecoin50 (ใช้ได้ครั้งเดียว) --- */
+  if (raw.toLowerCase() === 'freecoin50') {
+    if (Store.isUsed('Freecoin50')) return toast('โค้ดนี้ถูกใช้ไปแล้ว ❌', 'err');
+    Store.markUsed('Freecoin50');
+    Store.addCoins(50);
+    settingsModal.classList.remove('show');
+    return toast('+50 🪙 สำเร็จ! 🎉', 'ok');
+  }
+
+  /* --- โค้ดลับ XXX (ใส่จำนวนคอยเอง) — ใช้ได้ไม่จำกัด --- */
+  if (raw === 'XXX') {
+    const amountStr = window.prompt('ใส่จำนวนคอยที่ต้องการ :', '1000');
+    if (amountStr === null) return;
+    const amount = parseInt(amountStr, 10);
+    if (!Number.isFinite(amount) || amount <= 0) return toast('จำนวนไม่ถูกต้อง ❌', 'err');
+    Store.addCoins(amount);
+    settingsModal.classList.remove('show');
+    return toast(`+${amount} 🪙 สำเร็จ! 🎉`, 'ok');
+  }
+
+  toast('โค้ดไม่ถูกต้อง ❌', 'err');
+});
+</script>
+</body>
+  </html>
