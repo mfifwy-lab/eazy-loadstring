@@ -1,0 +1,222 @@
+<!--
+const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
+const PORT = process.env.PORT || 3000;
+const ADMIN = process.env.ADMIN_PASS || 'admin1234';
+const FILE = path.join(__dirname, 'data.json');
+let db = { links: {} };
+try { db = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch (e) {}
+const save = () => fs.writeFileSync(FILE, JSON.stringify(db));
+const sessions = new Set();
+const rid = () => crypto.randomBytes(5).toString('base64url').replace(/[-_]/g, 'x').slice(0, 6);
+const validId = s => /^[A-Za-z0-9_-]{1,40}$/.test(s);
+const readBody = req => new Promise(r => {
+  let b = ''; req.on('data', c => { b += c; if (b.length > 1e6) req.destroy(); });
+  req.on('end', () => { try { r(JSON.parse(b || '{}')); } catch (e) { r({}); } });
+});
+const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+const ip = req => (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+const isAdmin = req => { const m = /(?:^|; )sid=([^;]+)/.exec(req.headers.cookie || ''); return !!m && sessions.has(m[1]); };
+function log(link, req, type, ok) {
+  link.logs.push({ t: Date.now(), ip: ip(req), ua: (req.headers['user-agent'] || '').slice(0, 120), type: type, ok: ok });
+  if (link.logs.length > 300) link.logs.shift();
+  save();
+}
+http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://x');
+  const p = url.pathname;
+
+  if (p.startsWith('/raw/')) {
+    const l = db.links[decodeURIComponent(p.slice(5))];
+    if (!l) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
+    const ok = !l.password || url.searchParams.get('key') === l.password;
+    log(l, req, 'raw', ok);
+    res.writeHead(ok ? 200 : 403, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(ok ? l.code : 'Wrong password');
+  }
+
+  if (p === '/api/create' && req.method === 'POST') {
+    const b = await readBody(req);
+    if (!b.code || !String(b.code).trim()) return json(res, 400, { error: 'empty' });
+    const count = Math.min(Math.max(parseInt(b.count) || 1, 1), 50);
+    const name = (b.name || '').trim();
+    if (name && !validId(name)) return json(res, 400, { error: 'badname' });
+    const out = [];
+    for (let i = 1; i <= count; i++) {
+      let id = name ? (count > 1 ? name + '-' + i : name) : rid();
+      while (!name && db.links[id]) id = rid();
+      if (db.links[id]) return json(res, 409, { error: 'taken' });
+      db.links[id] = { code: String(b.code), password: b.password || '', created: Date.now(), logs: [] };
+      out.push({ id: id, password: b.password || '' });
+    }
+    save();
+    return json(res, 200, { items: out });
+  }
+
+  if (p === '/api/view' && req.method === 'POST') {
+    const b = await readBody(req);
+    const l = db.links[b.id];
+    if (!l) return json(res, 404, { error: 'notfound' });
+    const ok = !l.password || b.password === l.password;
+    log(l, req, 'web', ok);
+    return ok ? json(res, 200, { code: l.code }) : json(res, 403, { error: 'wrong' });
+  }
+
+  if (p === '/api/admin/login' && req.method === 'POST') {
+    const b = await readBody(req);
+    if (b.password !== ADMIN) return json(res, 403, { error: 'wrong' });
+    const sid = crypto.randomBytes(16).toString('hex'); sessions.add(sid);
+    res.setHeader('Set-Cookie', 'sid=' + sid + '; HttpOnly; Path=/; SameSite=Strict');
+    return json(res, 200, { ok: 1 });
+  }
+
+  if (p.startsWith('/api/admin/')) {
+    if (!isAdmin(req)) return json(res, 401, { error: 'auth' });
+    if (p === '/api/admin/list') return json(res, 200, { links: db.links });
+    const b = await readBody(req);
+    const l = db.links[b.id];
+    if (!l) return json(res, 404, { error: 'notfound' });
+    if (p === '/api/admin/update') {
+      if (typeof b.password === 'string') l.password = b.password;
+      if (typeof b.code === 'string') l.code = b.code;
+      if (b.newId && b.newId !== b.id) {
+        if (!validId(b.newId)) return json(res, 400, { error: 'badname' });
+        if (db.links[b.newId]) return json(res, 409, { error: 'taken' });
+        db.links[b.newId] = l; delete db.links[b.id];
+      }
+      save(); return json(res, 200, { ok: 1 });
+    }
+    if (p === '/api/admin/delete') { delete db.links[b.id]; save(); return json(res, 200, { ok: 1 }); }
+  }
+
+  if (p === '/' || p === '/admin' || p.startsWith('/v/')) {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(fs.readFileSync(__filename));
+  }
+  res.writeHead(404); res.end('Not found');
+}).listen(PORT, () => console.log('Running on http://localhost:' + PORT + '  admin pass: ' + ADMIN));
+/*
+-->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LuaBin</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0f1115;color:#e6e6e6;font-family:system-ui,sans-serif}
+.wrap{max-width:820px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+header a{color:#8ab4ff;text-decoration:none;margin-right:12px}
+h1{font-size:20px;margin:0}
+textarea,input{width:100%;background:#1a1d24;color:#e6e6e6;border:1px solid #333;border-radius:8px;padding:10px;font-family:ui-monospace,monospace;font-size:14px;margin:4px 0 10px}
+textarea{min-height:220px}
+button{background:#3b82f6;color:#fff;border:0;border-radius:8px;padding:10px 14px;font-size:14px;cursor:pointer;margin:2px 4px 2px 0}
+button.s{background:#2a2f3a}button.d{background:#c0392b}
+.card{background:#161920;border:1px solid #2a2f3a;border-radius:10px;padding:12px;margin:10px 0}
+pre{background:#0a0c10;padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;word-break:break-all;font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
+small{color:#9aa}
+.err{color:#ff7b7b}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fengari-web/0.1.4/fengari-web.js"></script>
+</head>
+<body><div class="wrap" id="app"></div>
+<script>
+const T={
+en:{title:'LuaBin',code:'Lua code',name:'Custom link name (optional)',pass:'Password (optional)',count:'Number of links',short:'Shorten',ls:'Shorten → loadstring',mkls:'Make loadstring',copy:'Copy',copied:'Copied!',link:'Link',err_empty:'Code is empty',err_badname:'Name: letters, numbers, - _ only',err_taken:'Name already taken',pw:'Password',open:'Open',wrong:'Wrong password',notfound:'Not found',run:'Run Lua',out:'Output',admin:'Owner',login:'Login',save:'Save',del:'Delete',logs:'Access logs',id:'Link name',home:'Home',note:'Note: Roblox-only APIs (game, workspace...) do not exist in the browser runner.',confirm:'Delete?',nologs:'No logs yet'},
+th:{title:'LuaBin',code:'โค้ด Lua',name:'ตั้งชื่อลิงก์ (ไม่บังคับ)',pass:'รหัสผ่าน (ไม่บังคับ)',count:'จำนวนลิงก์',short:'ย่อลิงก์',ls:'ย่อ → loadstring',mkls:'ทำ loadstring',copy:'คัดลอก',copied:'คัดลอกแล้ว!',link:'ลิงก์',err_empty:'ยังไม่ได้ใส่โค้ด',err_badname:'ชื่อใช้ได้เฉพาะ a-z 0-9 - _',err_taken:'ชื่อนี้ถูกใช้แล้ว',pw:'รหัสผ่าน',open:'เข้าดู',wrong:'รหัสผ่านผิด',notfound:'ไม่พบลิงก์',run:'รันโค้ด Lua',out:'ผลลัพธ์',admin:'เจ้าของ',login:'เข้าสู่ระบบ',save:'บันทึก',del:'ลบ',logs:'บันทึกการเข้า',id:'ชื่อลิงก์',home:'หน้าแรก',note:'หมายเหตุ: คำสั่งเฉพาะ Roblox (game, workspace ...) ใช้ในเบราว์เซอร์ไม่ได้',confirm:'ลบจริงไหม?',nologs:'ยังไม่มีบันทึก'}
+};
+let lang=localStorage.lang||'en';
+const t=k=>T[lang][k]||k;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const api=(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}).then(async r=>({s:r.status,d:await r.json().catch(()=>({}))}));
+const rawUrl=i=>location.origin+'/raw/'+i.id+(i.password?'?key='+encodeURIComponent(i.password):'');
+const loader=i=>'loadstring(game:HttpGet("'+rawUrl(i)+'"))()';
+const copy=(txt,btn)=>{navigator.clipboard.writeText(txt);const o=btn.textContent;btn.textContent=t('copied');setTimeout(()=>btn.textContent=o,1200)};
+function head(){return `<header><h1>📜 ${t('title')}</h1><div><a href="/">${t('home')}</a><a href="/admin">${t('admin')}</a><button class="s" onclick="setLang('${lang==='en'?'th':'en'}')">${lang==='en'?'ไทย':'EN'}</button></div></header>`}
+function setLang(l){lang=l;localStorage.lang=l;route()}
+function route(){
+  const p=location.pathname;
+  if(p==='/admin')return admin();
+  if(p.startsWith('/v/'))return view(decodeURIComponent(p.slice(3)));
+  home();
+}
+
+// ---------- Home ----------
+let last=null,lastMode='url',form={code:'',name:'',pass:'',count:1};
+function home(){
+  $('#app').innerHTML=head()+`
+  <label>${t('code')}</label><textarea id="code" spellcheck="false">${esc(form.code)}</textarea>
+  <div class="row"><div><label>${t('name')}</label><input id="name" value="${esc(form.name)}"></div>
+  <div><label>${t('pass')}</label><input id="pass" value="${esc(form.pass)}"></div>
+  <div><label>${t('count')}</label><input id="count" type="number" min="1" max="50" value="${form.count}"></div></div>
+  <button onclick="create('url')">${t('short')}</button><button onclick="create('ls')">${t('ls')}</button>
+  <div id="msg" class="err"></div><div id="res"></div>`;
+  if(last)showRes();
+}
+async function create(mode){
+  form={code:$('#code').value,name:$('#name').value,pass:$('#pass').value,count:$('#count').value};
+  const r=await api('/api/create',{code:form.code,name:form.name,password:form.pass,count:form.count});
+  if(r.s!==200){$('#msg').textContent=t('err_'+r.d.error);return}
+  $('#msg').textContent='';last=r.d.items;lastMode=mode;showRes();
+}
+function showRes(){
+  $('#res').innerHTML=last.map((i,k)=>`<div class="card"><small>${t('link')}</small><pre>${esc(rawUrl(i))}</pre>
+  <button class="s" onclick="copy(rawUrl(last[${k}]),this)">${t('copy')}</button>
+  <a style="color:#8ab4ff" href="/v/${encodeURIComponent(i.id)}" target="_blank">/v/${esc(i.id)}</a>
+  ${lastMode==='ls'?lsBlock(k):`<div id="ls${k}"><button onclick="document.getElementById('ls${k}').innerHTML=lsBlock(${k})">${t('mkls')}</button></div>`}</div>`).join('');
+}
+function lsBlock(k){return `<pre>${esc(loader(last[k]))}</pre><button onclick="copy(loader(last[${k}]),this)">${t('copy')} loadstring</button>`}
+
+// ---------- Viewer (needs password) ----------
+function view(id){
+  $('#app').innerHTML=head()+`<div class="card"><b>/${esc(id)}</b><br><br><label>${t('pw')}</label><input id="vp" type="password" onkeydown="if(event.key==='Enter')unlock()"><button onclick="unlock()">${t('open')}</button><div id="msg" class="err"></div></div><div id="body"></div>`;
+  window.unlock=async()=>{
+    const r=await api('/api/view',{id,password:$('#vp').value});
+    if(r.s!==200){$('#msg').textContent=t(r.s===404?'notfound':'wrong');return}
+    $('#msg').textContent='';window._code=r.d.code;
+    $('#body').innerHTML=`<div class="card"><pre>${esc(r.d.code)}</pre>
+    <button class="s" onclick="copy(window._code,this)">${t('copy')}</button><button onclick="runBrowser()">${t('run')}</button>
+    <small>${t('note')}</small><br><br><small>${t('out')}</small><pre id="out"></pre></div>`;
+  };
+  api('/api/view',{id,password:''}).then(r=>{if(r.s===200)unlock()});
+}
+function runLua(src){
+  const f=window.fengari;if(!f)return 'Lua runtime not loaded';
+  const {lua,lauxlib,lualib,to_luastring,to_jsstring}=f;
+  const L=lauxlib.luaL_newstate();lualib.luaL_openlibs(L);const out=[];
+  lua.lua_pushjsfunction(L,function(L){const n=lua.lua_gettop(L),p=[];for(let i=1;i<=n;i++){p.push(to_jsstring(lauxlib.luaL_tolstring(L,i)));lua.lua_pop(L,1)}out.push(p.join('\t'));return 0});
+  lua.lua_setglobal(L,to_luastring('print'));
+  const st=lauxlib.luaL_dostring(L,to_luastring(src));
+  if(st!==0)out.push('Error: '+to_jsstring(lua.lua_tostring(L,-1)));
+  return out.join('\n');
+}
+function runBrowser(){$('#out').textContent=runLua(window._code)}
+
+// ---------- Admin ----------
+async function admin(){
+  const r=await fetch('/api/admin/list').then(async r=>({s:r.status,d:await r.json()}));
+  if(r.s!==200){
+    $('#app').innerHTML=head()+`<div class="card"><label>${t('pw')}</label><input id="ap" type="password" onkeydown="if(event.key==='Enter')alogin()"><button onclick="alogin()">${t('login')}</button><div id="msg" class="err"></div></div>`;
+    window.alogin=async()=>{const x=await api('/api/admin/login',{password:$('#ap').value});x.s===200?admin():$('#msg').textContent=t('wrong')};
+    return;
+  }
+  window._links=r.d.links;const ids=Object.keys(_links).reverse();
+  $('#app').innerHTML=head()+(ids.length?ids.map((id,k)=>{const l=_links[id];return `<div class="card">
+  <label>${t('id')}</label><input id="id${k}" value="${esc(id)}">
+  <label>${t('pass')}</label><input id="pw${k}" value="${esc(l.password)}">
+  <label>${t('code')}</label><textarea id="c${k}" spellcheck="false" style="min-height:120px">${esc(l.code)}</textarea>
+  <small>${esc(rawUrl({id,password:l.password}))}</small><br>
+  <button onclick="asave(${k})">${t('save')}</button>
+  <button class="s" onclick="copy(loader({id:ids[${k}],password:_links[ids[${k}]].password}),this)">${t('copy')} loadstring</button>
+  <button class="s" onclick="document.getElementById('lg${k}').hidden^=1">${t('logs')} (${l.logs.length})</button>
+  <button class="d" onclick="adel(${k})">${t('del')}</button>
+  <div id="lg${k}" hidden>${l.logs.length?`<pre>${l.logs.slice().reverse().map(g=>`${new Date(g.t).toLocaleString()} | ${esc(g.ip)} | ${g.type} | ${g.ok?'OK':'FAIL'} | ${esc(g.ua)}`).join('\n')}</pre>`:`<small>${t('nologs')}</small>`}</div></div>`}).join(''):'<small>-</small>');
+  window.ids=ids;
+  window.asave=async k=>{const x=await api('/api/admin/update',{id:ids[k],newId:$('#id'+k).value.trim(),password:$('#pw'+k).value,code:$('#c'+k).value});x.s===200?admin():alert(t('err_'+x.d.error))};
+  window.adel=async k=>{if(confirm(t('confirm'))){await api('/api/admin/delete',{id:ids[k]});admin()}};
+}
+route();
+</script></body></html><!-- */
