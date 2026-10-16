@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LuaShort</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2128;
+    --border:#30363d; --text:#e6edf3; --muted:#8b949e;
+    --accent:#58a6ff; --green:#238636; --red:#f85149; --gold:#f0b132;
+  }
+  html,body{background:var(--bg);color:var(--text);min-height:100vh;
+    font-family:-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+  .wrap{max-width:900px;margin:0 auto;padding:40px 20px 60px}
+  h1{font-size:28px;margin-bottom:6px;
+    background:linear-gradient(90deg,#58a6ff,#a371f7,#f0b132);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:24px}
+  .card{background:var(--panel);border:1px solid var(--border);
+    border-radius:14px;padding:20px;margin-bottom:16px}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px;font-weight:600}
+  input[type=text],input[type=password],textarea{
+    width:100%;background:#0d1117;color:var(--text);border:1px solid var(--border);
+    border-radius:10px;padding:12px 14px;font-size:14px;outline:none;
+    font-family:inherit;transition:.2s}
+  input:focus,textarea:focus{border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(88,166,255,.15)}
+  textarea{min-height:200px;resize:vertical;
+    font-family:"JetBrains Mono",Consolas,monospace;font-size:13px;line-height:1.55}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  button.btn{border:none;border-radius:10px;padding:12px 20px;font-size:14px;
+    font-weight:700;cursor:pointer;color:#fff;transition:.18s;font-family:inherit}
+  button.btn:active{transform:scale(.97)}
+  .btn-primary{background:var(--green)}.btn-primary:hover{background:#2ea043}
+  .btn-accent{background:#1f6feb}.btn-accent:hover{background:#388bfd}
+  .btn-gold{background:#9e6a03}.btn-gold:hover{background:#bb8009}
+  .btn-red{background:#b62324}.btn-red:hover{background:#da3633}
+  .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  .btn-ghost:hover{background:var(--panel2)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .result{margin-top:16px;display:none}
+  .result.show{display:block}
+  .linkBox{display:flex;gap:8px;align-items:center;background:#0d1117;
+    border:1px dashed var(--accent);border-radius:10px;padding:12px 14px;
+    word-break:break-all;font-family:Consolas,monospace;font-size:12px;
+    color:var(--accent)}
+  .linkBox span{flex:1}
+  .codeHeader{display:flex;justify-content:space-between;align-items:center;
+    flex-wrap:wrap;gap:10px;margin-bottom:14px}
+  .codeHeader h2{font-size:20px}
+  .stats{display:flex;gap:14px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+  .stats b{color:var(--text)}
+  pre.code{background:#010409;border:1px solid var(--border);border-radius:10px;
+    padding:16px;overflow:auto;max-height:400px;
+    font-family:"JetBrains Mono",Consolas,monospace;font-size:13px;
+    line-height:1.55;color:#c9d1d9;white-space:pre;tab-size:2}
+  .loadBox{margin-top:16px;padding:14px;background:#0d1117;
+    border:1px solid var(--green);border-radius:10px;display:none}
+  .loadBox.show{display:block}
+  .loadBox .out{font-family:Consolas,monospace;font-size:12px;color:#7ee787;
+    word-break:break-all;margin-bottom:10px}
+  .gate{padding:20px;margin:14px 0;background:#0d1117;
+    border:1px solid var(--gold);border-radius:10px}
+  .gate h3{font-size:16px;margin-bottom:6px;color:var(--gold)}
+  .gate p{font-size:13px;color:var(--muted);margin-bottom:14px}
+  .setPwd{padding:16px;margin-top:14px;background:#0d1117;
+    border:1px solid var(--accent);border-radius:10px}
+  .setPwd h3{font-size:15px;margin-bottom:6px;color:var(--accent)}
+  .setPwd p{font-size:12px;color:var(--muted);margin-bottom:12px}
+  .toast{position:fixed;bottom:24px;left:50%;
+    transform:translateX(-50%) translateY(80px);background:var(--panel2);
+    border:1px solid var(--border);padding:12px 22px;border-radius:10px;
+    font-size:14px;opacity:0;transition:.3s;z-index:2000;pointer-events:none;
+    box-shadow:0 10px 30px rgba(0,0,0,.5);max-width:90vw;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.ok{border-color:var(--green);color:#7ee787}
+  .toast.err{border-color:var(--red);color:#ff7b72}
+  .hidden{display:none !important}
+  .lockBadge{display:inline-flex;align-items:center;gap:4px;font-size:11px;
+    padding:2px 8px;border-radius:999px;margin-left:6px;font-weight:700;
+    background:rgba(240,177,50,.15);color:var(--gold)}
+  .note{font-size:12px;color:var(--muted);margin-top:8px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>LuaShort</h1>
+  <p class="sub">Paste Lua code → Create short link with password → Share</p>
+
+  <div class="card">
+    <label>📝 Your Lua Code</label>
+    <textarea id="codeInput" placeholder="-- Roblox Lua Script&#10;print(&quot;hello&quot;)"></textarea>
+
+    <div class="row">
+      <input type="text" id="customName" placeholder="Link name (optional)" style="flex:1;min-width:200px"/>
+    </div>
+
+    <div class="row">
+      <input type="password" id="passwordInput" placeholder="🔒 Password (optional — anyone will need this)" style="flex:1;min-width:200px" autocomplete="new-password"/>
+    </div>
+
+    <div class="row">
+      <button class="btn btn-primary" id="genBtn" type="button">🔗 Create Link</button>
+      <button class="btn btn-ghost" id="clearBtn" type="button">Clear</button>
+    </div>
+
+    <div class="result" id="resultBox">
+      <label style="margin-top:14px">✅ Your link</label>
+      <div class="linkBox"><span id="shortLink"></span></div>
+      <div class="row">
+        <button class="btn btn-accent" id="copyLink" type="button">📋 Copy link</button>
+        <button class="btn btn-ghost" id="openLink" type="button">👁 View code</button>
+      </div>
+
+      <!-- ตั้งรหัสหลังสร้างเสร็จ -->
+      <div class="setPwd hidden" id="setPwdBox">
+        <h3>🔐 Set password</h3>
+        <p>This code has no password yet. Anyone can view it. Set one now:</p>
+        <input type="password" id="setPwdInput" placeholder="New password..." autocomplete="new-password"/>
+        <div class="row">
+          <button class="btn btn-gold" id="setPwdBtn" type="button">💾 Set password</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="codeCard">
+    <div class="codeHeader">
+      <h2>📜 Lua Code</h2>
+      <div class="stats">
+        <span>👁 Views: <b id="viewCount">0</b></span>
+        <span>🆔 <b id="codeId">-</b></span>
+      </div>
+    </div>
+
+    <div class="gate hidden" id="gateBox">
+      <h3>🔒 This code is locked</h3>
+      <p>Enter the password to view the code</p>
+      <input type="password" id="gateInput" placeholder="Enter password..." autocomplete="off"/>
+      <div class="row">
+        <button class="btn btn-gold" id="gateSubmit" type="button">🔓 Unlock</button>
+      </div>
+    </div>
+
+    <div id="codeContent" class="hidden">
+      <pre class="code" id="codeDisplay"></pre>
+
+      <div class="row">
+        <button class="btn btn-gold" id="loadstringBtn" type="button">⚡ Make Loadstring</button>
+        <button class="btn btn-ghost" id="closeCodeBtn" type="button">✕ Close</button>
+      </div>
+
+      <div class="loadBox" id="loadBox">
+        <label>🎯 Copy this into your executor</label>
+        <div class="out" id="loadOut"></div>
+        <button class="btn btn-accent" id="copyLoad" type="button">📋 Copy Loadstring</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>📊 Your links</label>
+    <div id="myLinks" style="font-size:14px;color:var(--muted)">No links yet</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ============ STORAGE ============ */
+  const mem = {};
+  function lsGet(k,d){
+    try{const v=localStorage.getItem(k);return v===null?d:v;}
+    catch(e){return mem[k]!==undefined?mem[k]:d;}
+  }
+  function lsSet(k,v){
+    try{localStorage.setItem(k,v);}catch(e){mem[k]=v;}
+  }
+  function ssGet(k,d){
+    try{const v=sessionStorage.getItem(k);return v===null?d:v;}
+    catch(e){return d;}
+  }
+  function ssSet(k,v){
+    try{sessionStorage.setItem(k,v);}catch(e){}
+  }
+
+  const LS_HIST  = 'luashort_hist_v1';
+  const LS_OWNER = 'luashort_owner_v1';
+
+  /* ============ HELPERS ============ */
+  function $(id){ return document.getElementById(id); }
+  function genId(len){
+    len = len || 6;
+    const c = 'abcdefghijkmnpqrstuvwxyz23456789';
+    let s = '';
+    for (let i = 0; i < len; i++) s += c[Math.floor(Math.random()*c.length)];
+    return s;
+  }
+  function hashPwd(s){
+    let h = 5381;
+    for (let i = 0; i < s.length; i++){
+      h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    }
+    return 'h' + (h >>> 0).toString(36);
+  }
+  function toast(msg, type){
+    type = type || 'ok';
+    const el = $('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.className = 'toast show ' + type;
+    clearTimeout(toast._tid);
+    toast._tid = setTimeout(function(){ el.className = 'toast ' + type; }, 2400);
+  }
+  function copy(text){
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(
+        function(){ toast('Copied ✅','ok'); },
+        function(){ fb(text); }
+      );
+    } else fb(text);
+  }
+  function fb(text){
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast('Copied ✅','ok');
+    } catch(e){ toast('Copy failed ❌','err'); }
+  }
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(m){
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+    });
+  }
+  function getOwnerId(){
+    let id = lsGet(LS_OWNER, '');
+    if (!id){
+      id = 'o_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+      lsSet(LS_OWNER, id);
+    }
+    return id;
+  }
+
+  /* ============ RECORD STORAGE (jsonblob) ============ */
+  const API = 'https://jsonblob.com/api/jsonBlob';
+
+  async function createRecord(rec){
+    try {
+      const res = await fetch(API, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body: JSON.stringify(rec)
+      });
+      if (res.ok){
+        const loc = res.headers.get('Location') || '';
+        const id = loc.split('/').pop();
+        if (id) return id;
+      }
+    } catch(e){}
+    // fallback inline
+    return 'i_' + btoa(unescape(encodeURIComponent(JSON.stringify(rec))));
+  }
+
+  async function readRecord(id){
+    if (id.indexOf('i_') === 0){
+      try {
+        const json = decodeURIComponent(escape(atob(id.slice(2))));
+        const r = JSON.parse(json);
+        r.__id = id;
+        return r;
+      } catch(e){ return null; }
+    }
+    try {
+      const res = await fetch(API + '/' + id, {headers:{'Accept':'application/json'}});
+      if (res.ok){
+        const data = await res.json();
+        if (data && typeof data.code === 'string'){
+          data.__id = id;
+          return data;
+        }
+      }
+    } catch(e){}
+    return null;
+  }
+
+  async function updateRecord(id, rec){
+    if (id.indexOf('i_') === 0){
+      const copy = Object.assign({}, rec);
+      delete copy.__id;
+      return 'i_' + btoa(unescape(encodeURIComponent(JSON.stringify(copy))));
+    }
+    try {
+      const copy = Object.assign({}, rec);
+      delete copy.__id;
+      const res = await fetch(API + '/' + id, {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(copy)
+      });
+      return res.ok ? id : null;
+    } catch(e){ return null; }
+  }
+
+  /* ============ UPLOAD LUA ============ */
+  function uploadLua(code){
+    return fetch('https://paste.rs/', {method:'POST', body: code})
+      .then(function(r){
+        if (!r.ok) throw new Error('paste.rs');
+        return r.text();
+      })
+      .then(function(txt){
+        txt = (txt||'').trim();
+        if (/^https?:\/\//i.test(txt)) return txt;
+        throw new Error('bad url');
+      })
+      .catch(function(){
+        const form = new URLSearchParams();
+        form.append('content', code);
+        form.append('format', 'url');
+        form.append('expiry_days', '365');
+        return fetch('https://dpaste.com/api/v2/', {
+          method:'POST',
+          headers:{'Content-Type':'application/x-www-form-urlencoded'},
+          body: form.toString()
+        }).then(function(r){
+          if (!r.ok) throw new Error('dpaste');
+          return r.text();
+        }).then(function(txt){
+          txt = (txt||'').trim();
+          if (/^https?:\/\//i.test(txt)) return txt.replace(/\/+$/, '') + '.txt';
+          throw new Error('bad url');
+        });
+      })
+      .catch(function(){
+        const form = new FormData();
+        form.append('file', new Blob([code], {type:'text/plain'}), 'script.lua');
+        return fetch('https://0x0.st', {method:'POST', body: form})
+          .then(function(r){
+            if (!r.ok) throw new Error('0x0');
+            return r.text();
+          })
+          .then(function(txt){
+            txt = (txt||'').trim();
+            if (/^https?:\/\//i.test(txt)) return txt;
+            throw new Error('bad url');
+          });
+      })
+      .catch(function(){ return null; });
+  }
+
+  function tryShorten(url){
+    return fetch('https://tinyurl.com/api-create.php?url=' + encodeURIComponent(url))
+      .then(function(r){ return r.ok ? r.text() : url; })
+      .then(function(txt){
+        txt = (txt||'').trim();
+        return txt.indexOf('http') === 0 ? txt : url;
+      })
+      .catch(function(){ return url; });
+  }
+
+  /* ============ HISTORY ============ */
+  function getHist(){
+    try { return JSON.parse(lsGet(LS_HIST, '{}')); }
+    catch(e){ return {}; }
+  }
+  function setHist(h){ lsSet(LS_HIST, JSON.stringify(h)); }
+  function saveHist(id, rec){
+    const h = getHist();
+    h[id] = {
+      id: id,
+      name: rec.name,
+      createdAt: rec.createdAt,
+      views: rec.views || 0,
+      hasPwd: !!rec.pwd
+    };
+    setHist(h);
+  }
+
+  function renderMyLinks(){
+    const box = $('myLinks');
+    if (!box) return;
+    const h = getHist();
+    const ids = Object.keys(h).sort(function(a,b){
+      return (h[b].createdAt||0)-(h[a].createdAt||0);
+    });
+    if (!ids.length){ box.innerHTML = 'No links yet'; return; }
+    box.innerHTML = ids.map(function(id){
+      const c = h[id];
+      const url = location.origin + location.pathname + '#c=' + id;
+      const lock = c.hasPwd ? '<span class="lockBadge">🔒 Locked</span>' : '';
+      return '<div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">'
+        + '<div style="min-width:0;flex:1">'
+        + '<div style="color:var(--text);font-weight:600">'+esc(c.name)+lock+'</div>'
+        + '<a href="#c='+esc(id)+'" style="color:var(--accent);font-size:12px;word-break:break-all">'+esc(url)+'</a>'
+        + '</div>'
+        + '<div style="font-size:12px;color:var(--muted);white-space:nowrap">👁 '+(c.views||0)+'</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  /* ============ SESSION UNLOCK ============ */
+  function unlockedSet(id){ ssSet('unlock_'+id, '1'); }
+  function isUnlocked(id){ return ssGet('unlock_'+id, '') === '1'; }
+
+  /* ============ VIEW ============ */
+  let currentRecord = null;
+
+  function showCodeCard(rec){
+    currentRecord = rec;
+    const id = rec.__id || '';
+    $('codeId').textContent = id.length > 14 ? id.slice(0,14)+'…' : id;
+    $('viewCount').textContent = rec.views || 0;
+    $('loadBox').classList.remove('show');
+    $('codeCard').classList.remove('hidden');
+
+    // ถ้ามีรหัส + ยังไม่ปลดล็อก → gate (เจ้าของก็ต้องใส่)
+    if (rec.pwd && !isUnlocked(id)){
+      $('gateBox').classList.remove('hidden');
+      $('codeContent').classList.add('hidden');
+      $('gateInput').value = '';
+      setTimeout(function(){ try{ $('gateInput').focus(); }catch(e){} }, 100);
+    } else {
+      $('gateBox').classList.add('hidden');
+      $('codeContent').classList.remove('hidden');
+      $('codeDisplay').textContent = rec.code;
+    }
+
+    try { $('codeCard').scrollIntoView({behavior:'smooth', block:'start'}); } catch(e){}
+  }
+
+  function hideCodeCard(){
+    currentRecord = null;
+    $('codeCard').classList.add('hidden');
+    $('loadBox').classList.remove('show');
+    $('gateBox').classList.add('hidden');
+    $('codeContent').classList.add('hidden');
+  }
+
+  async function openCodeById(id){
+    hideCodeCard();
+    const rec = await readRecord(id);
+    if (!rec){ toast('Code not found ❌','err'); return; }
+
+    // increment views
+    rec.views = (rec.views || 0) + 1;
+    updateRecord(id, rec).catch(function(){});
+
+    // sync hist
+    const h = getHist();
+    if (h[id]){ h[id].views = rec.views; setHist(h); }
+
+    showCodeCard(rec);
+    renderMyLinks();
+  }
+
+  function tryUnlock(){
+    const rec = currentRecord;
+    if (!rec) return;
+    if (!rec.pwd){ unlockedSet(rec.__id); return showCodeCard(rec); }
+
+    const input = $('gateInput').value;
+    if (!input) return toast('Please enter password ❌','err');
+
+    if (hashPwd(input) === rec.pwd){
+      unlockedSet(rec.__id);
+      toast('Unlocked 🔓','ok');
+      showCodeCard(rec);
+    } else {
+      toast('Wrong password ❌','err');
+      $('gateInput').value = '';
+      try{ $('gateInput').focus(); }catch(e){}
+    }
+  }
+
+  /* ============ ROUTER ============ */
+  async function router(){
+    const hash = location.hash.slice(1);
+    if (hash.indexOf('c=') === 0){
+      const id = hash.slice(2);
+      await openCodeById(id);
+    } else {
+      hideCodeCard();
+    }
+  }
+
+  /* ============ CREATE ============ */
+  let lastCreatedId = null;
+
+  async function onGen(){
+    const code = $('codeInput').value.trim();
+    if (!code) return toast('Please enter code ❌','err');
+
+    const btn = $('genBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Uploading...';
+
+    const name = $('customName').value.trim() || genId();
+    const pwdRaw = $('passwordInput').value;
+    const pwdHash = pwdRaw ? hashPwd(pwdRaw) : null;
+    const owner = getOwnerId();
+
+    const pasteUrl = await uploadLua(code);
+    if (!pasteUrl){
+      btn.disabled = false;
+      btn.textContent = '🔗 Create Link';
+      return toast('Upload failed ❌','err');
+    }
+
+    const rec = {
+      code: code,
+      pasteUrl: pasteUrl,
+      name: name,
+      owner: owner,
+      pwd: pwdHash,
+      views: 0,
+      createdAt: Date.now()
+    };
+
+    try {
+      const id = await createRecord(rec);
+      rec.__id = id;
+      lastCreatedId = id;
+
+      saveHist(id, rec);
+
+      const shareUrl = location.origin + location.pathname + '#c=' + id;
+      const shortUrl = await tryShorten(shareUrl);
+
+      $('shortLink').textContent = shortUrl;
+      $('resultBox').classList.add('show');
+      $('resultBox').dataset.url = shortUrl;
+      $('resultBox').dataset.id  = id;
+
+      // แสดงช่องตั้งรหัส (ถ้ายังไม่มีรหัส)
+      if (!pwdHash){
+        $('setPwdBox').classList.remove('hidden');
+      } else {
+        $('setPwdBox').classList.add('hidden');
+      }
+
+      toast(pwdHash ? 'Link created 🔒' : 'Link created 🎉','ok');
+      renderMyLinks();
+    } catch(e){
+      toast('Something went wrong ❌','err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🔗 Create Link';
+    }
+  }
+
+  /* ============ SET PASSWORD (หลังสร้างเสร็จ) ============ */
+  async function onSetPwd(){
+    const pwd = $('setPwdInput').value;
+    if (!pwd) return toast('Please enter password ❌','err');
+    if (!lastCreatedId) return;
+
+    const rec = await readRecord(lastCreatedId);
+    if (!rec) return toast('Code not found ❌','err');
+
+    rec.pwd = hashPwd(pwd);
+    const newId = await updateRecord(rec.__id, rec);
+
+    if (!newId) return toast('Failed to
